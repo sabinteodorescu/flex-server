@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Change Folder</title>
+</head>
+<body>
+  <h1>Change Folder Path</h1>
+  <form method="POST" action="{{ url_for('change_folder') }}">
+    <label for="folder_path">Enter the absolute path of your folder:</label>
+    <input type="text" id="folder_path" name="folder_path" required>
+    <button type="submit">Set Folder</button>
+  </form>
+  <p>{{ message }}</p>
+</body>
+</html>
