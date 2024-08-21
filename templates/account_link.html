@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Account Linking</title>
+</head>
+<body>
+  <h1>Link Your Account</h1>
+  
+  <form method="POST" action="{{ url_for('account_link') }}">
+    <label for="username">Username:</label>
+    <input type="text" name="username" id="username" required>
+    <button type="submit">Generate Link Code</button>
+  </form>
+  
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      <ul>
+        {% for message in messages %}
+          <li>{{ message }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  {% endwith %}
+</body>
+</html>
