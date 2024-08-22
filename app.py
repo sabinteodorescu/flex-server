@@ -71,30 +71,50 @@ def index():
 def account_link():
 	if request.method == 'POST':
 		username = request.form['username']
+		password = request.form['password']
 
-		link_code = ''.join(random.choices(string.ascii_lowercase + string.ascii_uppercase + string.digits, k=32))
-
-		try:
-			server_ip = requests.get('https://api.ipify.org').text
-		except Exception as e:
-			flash(f'Failed to get server ip: {str(e)}')
-			return redirect(url_for('account_link'))
-		
-		data = {
+		login_data = {
 			'username': username,
-			'server_ip': server_ip,
-			'link_code': link_code
+			'password': password
 		}
 
+		login_correct = False
+
 		try:
-			response = requests.post('http://localhost:4000/server-link-init', json=data)
+			response = requests.post('http://localhost:4000/server-login-test', json=login_data)
 
 			if response.status_code == 200:
-				flash(f'Linking code generated: {link_code}')
+				login_correct = True
 			else:
-				flash(f'Failed to send data to the client: {response.text}')
+				flash(f'Login failed: {response.text}')
 		except Exception as e:
 			flash(f'Error sending data to the client: {str(e)}')
+			return redirect(url_for('account_link'))
+
+		if login_correct:
+			link_code = ''.join(random.choices(string.ascii_lowercase + string.ascii_uppercase + string.digits, k=32))
+
+			try:
+				server_ip = requests.get('https://api.ipify.org').text
+			except Exception as e:
+				flash(f'Failed to get server ip: {str(e)}')
+				return redirect(url_for('account_link'))
+			
+			data = {
+				'username': username,
+				'server_ip': server_ip,
+				'link_code': link_code
+			}
+
+			try:
+				response = requests.post('http://localhost:4000/server-link-init', json=data)
+
+				if response.status_code == 200:
+					flash(f'Linking code generated: {link_code}')
+				else:
+					flash(f'Failed to send data to the client: {response.text}')
+			except Exception as e:
+				flash(f'Error sending data to the client: {str(e)}')
 
 		return redirect(url_for('account_link'))
 	
