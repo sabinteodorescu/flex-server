@@ -1,4 +1,4 @@
-import os, random, string, requests, miniupnpc, socket
+import os, random, string, requests, miniupnpc, socket, time, threading
 from flask import Flask, request, jsonify, send_from_directory, render_template, redirect, url_for, flash
 from flask_cors import CORS, cross_origin
 
@@ -23,18 +23,6 @@ def get_local_ip():
 	
 	return local_ip
 
-def check_upnp_port_mapping(upnp, external_port, protocol='TCP'):
-	try:
-		num_mappings = upnp.totalportmappings
-		for i in range(num_mappings):
-			mapping = upnp.getgenericportmapping(i)
-			if mapping and mapping[1] == external_port and mapping[2] == protocol:
-				return True
-	except Exception as e:
-		print(f'Error checking port mapping: {str(e)}')
-	
-	return False
-
 def setup_upnp():
 	local_ip = get_local_ip()
 	external_port = 5000
@@ -53,15 +41,12 @@ def setup_upnp():
 
 		upnp.selectigd()
 
-		if not check_upnp_port_mapping(upnp, external_port, protocol):
-			result = upnp.addportmapping(external_port, protocol, local_ip, internal_port, 'Flex Server', '')
+		result = upnp.addportmapping(external_port, protocol, local_ip, internal_port, 'Flex Server', '')
 
-			if result:
-				print(f'Port {external_port} mapped successfully.')
-			else:
-				print(f'Failed to map port {external_port}.')
+		if result:
+			print(f'Port {external_port} mapped successfully.')
 		else:
-			print(f'Port {external_port} is already mapped.')
+			print(f'Failed to map port {external_port}.')
 	except Exception as e:
 		print(f'Failed to set up port forwarding: {str(e)}')
 
@@ -70,9 +55,35 @@ def get_server_ip():
 		server_ip = requests.get('https://api.ipify.org').text
 		return server_ip
 	except Exception as e:
-		flash(f'Failed to get server ip: {str(e)}')
-		local_ip = get_local_ip()
-		return local_ip
+		return None
+
+current_ip = None
+ip_lock = threading.Lock()
+	
+def monitor_ip_change():
+	global current_ip
+
+	while True:
+		new_ip = get_server_ip()
+
+		print(f'Checking for ip change: {current_ip}, {new_ip}')
+		if new_ip and new_ip != current_ip:
+			with ip_lock:
+				old_ip = current_ip
+				current_ip = new_ip
+
+			data = {
+				'old_ip': old_ip,
+				'new_ip': new_ip
+			}
+
+			try:
+				requests.post('http://localhost:4000/server-ip-change', json=data)
+			except Exception as e:
+				print(e)
+
+
+		time.sleep(300)
 
 def get_folder_path():
 	server_ip = get_server_ip()
@@ -202,5 +213,8 @@ def serve_file(filename):
 
 if __name__ == '__main__':
 	setup_upnp()
+	current_ip = get_server_ip()
+	ip_monitor_thread = threading.Thread(target=monitor_ip_change, daemon=True)
+	ip_monitor_thread.start()
 	get_folder_path()
 	app.run(host='0.0.0.0', port=5000)
