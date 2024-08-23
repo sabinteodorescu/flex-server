@@ -1,4 +1,4 @@
-import os, random, string, requests, upnpclient, socket
+import os, random, string, requests, miniupnpc, socket
 from flask import Flask, request, jsonify, send_from_directory, render_template, redirect, url_for, flash
 from flask_cors import CORS, cross_origin
 
@@ -23,20 +23,15 @@ def get_local_ip():
 	
 	return local_ip
 
-def check_upnp_port_mapping(external_port, internal_port, protocol='TCP'):
-	devices = upnpclient.discover()
-	if not devices:
-		return False
-	
-	for device in devices:
-		for service in device.services:
-			if 'WANIPConn' in service.service_id or 'WANPPPConn' in service.service_id:
-				try:
-					mappings = service.GetGenericPortMappingEntry(NewExternalPort=external_port, NewProtocol=protocol, NewPortMappingIndex=0)
-					if mappings:
-						return True
-				except Exception as e:
-					print(f'Error checking port mapping: {str(e)}')
+def check_upnp_port_mapping(upnp, external_port, protocol='TCP'):
+	try:
+		num_mappings = upnp.totalportmappings
+		for i in range(num_mappings):
+			mapping = upnp.getgenericportmapping(i)
+			if mapping and mapping[1] == external_port and mapping[2] == protocol:
+				return True
+	except Exception as e:
+		print(f'Error checking port mapping: {str(e)}')
 	
 	return False
 
@@ -46,44 +41,29 @@ def setup_upnp():
 	internal_port = 5000
 	protocol = 'TCP'
 
-	if not check_upnp_port_mapping(external_port, internal_port, protocol):
-		try:
-			devices = upnpclient.discover()
+	try:
+		upnp = miniupnpc.UPnP()
+		
+		upnp.discoverdelay = 200
+		devices = upnp.discover()
 
-			if not devices:
-				print('No UPnP devices found.')
-				return
+		if devices == 0:
+			print('No UPnP devices found.')
+			return
 
-			d = None
-			for device in devices:
-				for service in device.services:
-					if 'WANIPConn' in service.service_id or 'WANPPPConn' in service.service_id:
-						d = device
-						break
-				if d:
-					break
+		upnp.selectigd()
 
-			if not d:
-				print('No router found.')
-				return
-			
-			print(f'Using UPnP device: {d.friendly_name}')
+		if not check_upnp_port_mapping(upnp, external_port, protocol):
+			result = upnp.addportmapping(external_port, protocol, local_ip, internal_port, 'Flex Server', '')
 
-			d.WANIPConn1.AddPortMapping(
-				NewRemoteHost='0.0.0.0',
-				NewExternalPort=external_port,
-				NewProtocol=protocol,
-				NewInternalPort=internal_port,
-				NewInternalClient=local_ip,
-				NewEnabled='1',
-				NewPortMappingDescription='Flex Server',
-				NewLeaseDuration=10000
-			)
-			print(f'Port 5000 mapped successfully.')
-		except Exception as e:
-			print(f'Failed to set up port forwarding: {str(e)}')
-	else:
-		print(f'Port {external_port} is already mapped.')
+			if result:
+				print(f'Port {external_port} mapped successfully.')
+			else:
+				print(f'Failed to map port {external_port}.')
+		else:
+			print(f'Port {external_port} is already mapped.')
+	except Exception as e:
+		print(f'Failed to set up port forwarding: {str(e)}')
 
 def get_server_ip():
 	try:
@@ -198,6 +178,7 @@ def change_folder():
 	return render_template('change_folder.html', message=message)
 
 @app.route('/files', methods=['GET'])
+@cross_origin()
 def list_dirs():
 	try:
 		file_list = []
